@@ -14,14 +14,17 @@ clean-targets: ["target", "dbt_packages", "logs"]
 
 flags:
   send_anonymous_usage_stats: false
-  # Required by Elementary (dbt 1.8+) to collect failed-row samples
-  require_explicit_package_overrides_for_builtin_materializations: false
   # Without this, on-run-end does not run for `dbt source freshness`,
   # so elementary.dbt_source_freshness_results stays empty.
   source_freshness_run_project_hooks: true
+  # Do NOT set require_explicit_package_overrides_for_builtin_materializations: false
+  # — that triggers PackageMaterializationOverrideDeprecation. Instead the project
+  # owns the override in macros/elementary_materialization.sql (Elementary 0.25+).
 
 vars:
   elementary_full_refresh: false
+  # Override is via macros/elementary_materialization.sql (not the deprecated flag).
+  # Mute Elementary's outdated on-run-start check that still asks for the flag.
   mute_ensure_materialization_override: true
   # Avoid flaky artifact-diff path; always replace artifact tables on upload
   cache_artifacts: false

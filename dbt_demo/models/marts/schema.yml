@@ -7,63 +7,81 @@ models:
       and product category for Elementary dimension anomalies.
     columns:
       - name: order_id
-        tests:
+        data_tests:
           - not_null
       - name: item_id
-        tests:
+        data_tests:
           - unique
           - not_null
       - name: calculated_total
-        tests:
+        data_tests:
           - not_null
       - name: category
-        tests:
+        data_tests:
           - not_null
       - name: order_date
-        tests:
+        data_tests:
           - not_null
       - name: updated_at
-        tests:
+        data_tests:
           - freshness_custom:
-              max_hours: 1440
+              arguments:
+                max_hours: 1440
 
-    tests:
+    data_tests:
       # Elementary volume anomalies on daily order volume
       - elementary.volume_anomalies:
-          timestamp_column: order_date
-          time_bucket:
-            period: day
-            count: 1
-          sensitivity: 2.5
+          arguments:
+            timestamp_column: order_date
+            time_bucket:
+              period: day
+              count: 1
+            sensitivity: 2.5
           config:
             severity: warn
             store_failures: true
       # Elementary dimension anomalies by product category
       - elementary.dimension_anomalies:
-          timestamp_column: order_date
-          dimensions:
-            - category
-          time_bucket:
-            period: day
-            count: 1
-          sensitivity: 2.5
+          arguments:
+            timestamp_column: order_date
+            dimensions:
+              - category
+            time_bucket:
+              period: day
+              count: 1
+            sensitivity: 2.5
           config:
             severity: warn
             store_failures: true
       - elementary.freshness_anomalies:
-          timestamp_column: updated_at
-          store_failures: true
+          arguments:
+            timestamp_column: updated_at
+          config:
+            store_failures: true
 
   - name: dim_customers
     description: Customer dimension with order aggregates
+    meta:
+      owner: ["data_team","analytics"]
     columns:
       - name: user_id
-        tests:
-          - unique
+        data_tests:
+          - unique:
+              config:
+                enabled: true
+                severity: error
+                error_if: ">1000"
+                warn_if: ">10"
+                tags: ["critical", "finance"]
+                meta:
+                  owner: "@finance_squad"
+                  incident_priority: "P2"
+                  description: user_id value must be unique
+                  Grudge: "I'm a grudge"
           - not_null
       - name: total_orders
-        tests:
+        data_tests:
           - not_null
       - name: total_spent
-        tests:
+        data_tests:
           - not_null

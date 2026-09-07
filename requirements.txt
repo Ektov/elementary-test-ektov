@@ -1,9 +1,15 @@
-# Local development / reference packages for the sandbox.
-# In Docker (Dockerfile.airflow): Cosmos is installed into the Airflow env WITHOUT
-# the [dbt-postgres] extra; dbt + elementary live in /opt/airflow/dbt_venv.
-apache-airflow>=3.1.8
-dbt-core==1.8.9
-dbt-postgres==1.8.2
-astronomer-cosmos==1.15.1
-elementary-data[postgres]==0.16.1
-psycopg2-binary>=2.9.9
+# Reference pin set for the sandbox (source of truth for humans / local pip).
+# Docker build does NOT install from this file — versions are hardcoded in
+# Dockerfile.airflow. Keep both files in sync when bumping packages.
+#
+# Layout in the image:
+#   - Airflow env: apache-airflow + astronomer-cosmos (no [dbt-*] extras)
+#   - /opt/airflow/dbt_venv: dbt-core + adapters + elementary-data
+
+apache-airflow==3.2.2
+dbt-core==1.11.12
+dbt-snowflake==1.11.5
+dbt-postgres==1.10.2
+astronomer-cosmos==1.14.0
+elementary-data[postgres,snowflake]==0.25.1
+psycopg2-binary>=2.9.9,<3.0

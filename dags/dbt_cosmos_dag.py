@@ -26,6 +26,7 @@ from cosmos import (
     ProjectConfig,
     RenderConfig,
     TestBehavior,
+    DbtTestLocalOperator
 )
 from cosmos.constants import ExecutionMode, LoadMode
 from cosmos.profiles import PostgresUserPasswordProfileMapping
@@ -72,7 +73,7 @@ render_config = RenderConfig(
 
 with DAG(
     dag_id="dbt_cosmos_demo",
-    schedule="@daily",
+    schedule=None,
     start_date=datetime(2024, 1, 1),
     catchup=False,
     tags=["dbt", "cosmos", "elementary", "sandbox"],
