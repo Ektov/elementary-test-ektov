@@ -62,6 +62,23 @@ seeds:
         product_id: integer
         quantity: integer
         unit_price: numeric(12,2)
+    raw_payments:
+      +column_types:
+        payment_id: integer
+        order_id: integer
+        payment_method: varchar(50)
+        amount: numeric(12,2)
+        currency: varchar(10)
+        paid_at: timestamp
+        _loaded_at: timestamp
+    raw_shipments:
+      +column_types:
+        shipment_id: integer
+        order_id: integer
+        carrier: varchar(50)
+        shipment_status: varchar(50)
+        shipped_at: timestamp
+        _loaded_at: timestamp
 
 models:
   dbt_demo:
@@ -69,6 +86,9 @@ models:
     staging:
       +schema: dbt_test
       +materialized: view
+    intermediate:
+      +schema: dbt_marts
+      +materialized: table
     marts:
       +schema: dbt_marts
       +materialized: table

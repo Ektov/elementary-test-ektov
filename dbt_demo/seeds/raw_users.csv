@@ -9,7 +9,7 @@ user_id,email,country,status,created_at
 8,user8@example.com,PL,active,2024-01-09 08:00:00
 9,user9@example.com,CZ,inactive,2024-01-10 09:00:00
 10,user10@example.com,CZ,blocked,2024-01-11 10:00:00
-11,"",PL,blocked,2024-01-12 11:00:00
+11,user11@example.com,PL,blocked,2024-01-12 11:00:00
 12,user12@example.com,BE,pending,2024-01-13 12:00:00
 13,user13@example.com,DE,inactive,2024-01-14 13:00:00
 14,user14@example.com,IT,pending,2024-01-15 14:00:00

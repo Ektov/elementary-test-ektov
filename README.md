@@ -25,10 +25,11 @@
 ├── dbt_demo/               # dbt-проект
 │   ├── dbt_project.yml     # store_failures: true
 │   ├── packages.yml        # elementary-data/elementary
-│   ├── seeds/              # CSV с намеренными ошибками
+│   ├── seeds/              # CSV с намеренными ошибками (+ payments/shipments)
 │   └── models/
-│       ├── staging/        # stg_* + generic tests
-│       └── marts/          # fct_orders, dim_customers, unit + elementary tests
+│       ├── staging/        # stg_* + generic tests + sources
+│       ├── intermediate/   # int_payments_broken (model ERROR demo)
+│       └── marts/          # fct_orders, dim_customers, mart_payment_summary
 └── scripts/generate_seeds.py
 ```
 
@@ -85,38 +86,110 @@ export DBT_PROFILES_DIR="$(pwd)"
 cd dbt_demo
 dbt deps          # скачает elementary
 dbt seed          # загрузит CSV → schema dbt_test
-dbt run           # staging + marts + elementary models (on-run-end)
-dbt test          # generic + unit + elementary tests
-dbt test --select test_type:unit   # только unit-тесты (должны PASS)
+dbt build         # run + test; нужен BUILD, чтобы downstream от error → skipped
+dbt source freshness   # заполняет elementary.dbt_source_freshness_results
 ```
+
+Эквивалент по шагам: `dbt run` + `dbt test` (но `dbt build` предпочтительнее для матрицы `skipped`).
+
+Только showcase-ветка: `dbt build --select tag:demo_showcase`.
 
 ### Elementary отчёт
 
-После `dbt run` / `dbt test` (чтобы заполнились таблицы Elementary):
+После `dbt seed && dbt build && dbt source freshness`.
+
+`edr` по умолчанию ищет **профиль с именем `elementary`** в `profiles.yml` (отдельный top-level ключ, не target `elementary` у `demo_dbt`). В корневом [`profiles.yml`](profiles.yml) он уже есть.
 
 ```bash
-# из корня репозитория, с тем же profiles.yml
+# из корня репозитория — profiles-dir = «.» (не «..»)
 edr report --project-dir dbt_demo --profiles-dir . --profile-target dev
 # HTML-отчёт появится в edr_target/ (или путь, который выведет CLI)
+```
+
+Фрагмент профиля (уже в `profiles.yml`):
+
+```yaml
+elementary:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      user: postgres
+      password: postgres
+      port: 5432
+      dbname: demo_db
+      schema: elementary
+      threads: 4
+      keepalives_idle: 0
 ```
 
 Либо внутри контейнера Airflow (нужен профиль с `host: postgres` — сгенерируйте временный или правьте target; смонтированный `profiles.yml` с `localhost` из контейнера к Postgres не подключится):
 
 ```bash
 docker compose exec airflow-scheduler bash -c \
-  'cd /opt/airflow/dbt_demo && /opt/airflow/dbt_venv/bin/edr report --profiles-dir . --profile-target dev'
+  'cd /opt/airflow && /opt/airflow/dbt_venv/bin/edr report --project-dir dbt_demo --profiles-dir . --profile-target dev'
 ```
 
-Предпочтительнее запускать `edr` **с хоста** (`--profiles-dir .` у корня репо, Postgres на `localhost:5432`).
+Предпочтительнее запускать `edr` **с хоста** (`--profiles-dir .` у корня репо, Postgres на `localhost:5432`). Не используйте `--profiles-dir ..` — тогда edr смотрит в родительский каталог (`PycharmProjects`) и не находит профиль.
+## Матрица статусов Elementary (`demo_showcase`)
+
+Отдельный подграф с тегом `demo_showcase` **не ломает** основной путь `orders → fct_orders / dim_customers` (модели marts остаются `success`).
+
+### Model Run Results
+
+| Статус | Как получается |
+|--------|----------------|
+| `success` | `stg_*`, `fct_orders`, `dim_customers`, `stg_payments`, `stg_shipments` |
+| `error` | `int_payments_broken` — SQL ссылается на несуществующую колонку |
+| `skipped` | `mart_payment_summary` (upstream model error) + `mart_demo_unit_fail` (upstream unit FAIL) |
+
+### Test Results (`elementary.elementary_test_results`)
+
+| Статус | Как получается |
+|--------|----------------|
+| `pass` | тесты на `stg_products` / clean-колонки (`currency` на payments) |
+| `warn` | `severity: warn` (users/orders/shipments relationships, accepted_values) |
+| `fail` | source tests on `payments.raw_payments` (`not_null` amount, `accepted_values` method) + `stg_shipments.shipment_status` |
+| `error` | test on `stg_demo_error_probe.nonexistent_column_for_demo_error` — column missing, DB error at runtime |
+
+### Source freshness (`elementary.dbt_source_freshness_results`)
+
+| Статус | Source / table | Как |
+|--------|----------------|-----|
+| `pass` | `payments.raw_payments` | свежий `_loaded_at` (генератор пишет «сейчас») |
+| `warn` | `raw.raw_users` | `created_at` из 2024 + `warn_after: 3 day` |
+| `error` | `ops.raw_shipments` | `_loaded_at` ~45 дней назад + `error_after: 14 day` |
+
+### Unit tests — caveat
+
+Elementary **не пишет unit tests в `elementary_test_results`** ([elementary#1709](https://github.com/elementary-data/elementary/issues/1709)).
+
+| Unit test | Ожидание | Где смотреть |
+|-----------|----------|--------------|
+| `test_fct_orders_calculated_total` | **PASS** | dbt logs / `dbt_run_results` |
+| `test_mart_demo_unit_fail_wrong_amount` | **FAIL** (заведомо неверный expect) → leaf-модель `mart_demo_unit_fail` **skipped** на build | dbt logs / `dbt_run_results` — **не** вкладка Test Results UI |
+
+> На одном и том же модели нельзя получить и unit FAIL, и model `success` в одном `dbt build`: unit test выполняется до materialize и при fail блокирует модель. Поэтому FAIL-unit живёт на leaf `mart_demo_unit_fail`, а `dim_customers` / `fct_orders` остаются success.
+
 ## Намеренные ошибки в seeds
 
-| Файл | Ошибка | Какой тест падает |
-|------|--------|-------------------|
-| `raw_users.csv` | дубликат `user_id=1` | `unique` на `stg_users.user_id` |
-| `raw_users.csv` | пустой `email` у `user_id=9999` | `not_null` / `unique` на `email` |
-| `raw_orders.csv` | `order_status=invalid_unknown_status` | `accepted_values` на `stg_orders.order_status` |
+| Файл | Ошибка | Эффект |
+|------|--------|--------|
+| `raw_users.csv` | дубликат `user_id=1` | `unique` warn на `stg_users.user_id` |
+| `raw_users.csv` | пустой `email` у `user_id=9999` | `not_null` / `unique` **warn** на `email` |
+| `raw_users.csv` | старые `created_at` | source freshness **warn** |
+| `raw_orders.csv` | `order_status=invalid_unknown_status` | `accepted_values` warn на `stg_orders` |
+| `raw_payments.csv` | пустой `amount` (`payment_id=9001`) | source `not_null` **fail**; model test **warn** |
+| `raw_payments.csv` | `payment_method=crypto_unknown` | source `accepted_values` **fail**; model test **warn** |
+| `raw_payments.csv` | `order_id=888888` (orphan) | `relationships` **warn** |
+| `raw_payments.csv` | свежий `_loaded_at` | source freshness **pass** |
+| `raw_shipments.csv` | `shipment_status=lost_in_space`, orphan order | model `accepted_values` **fail** + relationships **warn** |
+| `raw_shipments.csv` | stale `_loaded_at` (~45d) | source freshness **error** |
+| — | `stg_demo_error_probe` nonexistent column test | test status **error** (DB) |
+| — | `int_payments_broken` SQL | model run **error** → `mart_payment_summary` **skipped** |
 
-Перегенерация CSV:
+Перегенерация CSV (в т.ч. свежие timestamps для payments):
 
 ```bash
 python3 scripts/generate_seeds.py
@@ -124,13 +197,14 @@ python3 scripts/generate_seeds.py
 
 ## Типы тестов в проекте
 
-1. **Generic** — `models/staging/schema.yml` (`unique`, `not_null`, `accepted_values`, `relationships`). Намеренно падающие тесты имеют `severity: warn` и `store_failures: true`.
-2. **Native Unit Tests (dbt 1.8+)** — `models/marts/fct_orders.yml` → `test_fct_orders_calculated_total` (**должен PASS**).
+1. **Generic / source** — `models/staging/schema.yml` + `sources.yml` (`unique`, `not_null`, `accepted_values`, `relationships`). Mix `severity: warn` / `error` + `store_failures: true`.
+2. **Native Unit Tests (dbt 1.8+)** — PASS на `fct_orders`, намеренный FAIL на `dim_customers` (см. caveat выше).
 3. **Elementary Anomalies** — `models/marts/schema.yml`:
    - `elementary.volume_anomalies` на `fct_orders` (`order_date`, day bucket)
    - `elementary.dimension_anomalies` по `category` на `fct_orders`
+   - `elementary.freshness_anomalies` на `updated_at`
 
-> **Caveat:** аномалии Elementary обычно требуют историю запусков. На первом `dbt test` они могут пропускаться / давать warn / не иметь baseline — это нормально для sandbox. Повторите `dbt run && dbt test` несколько дней (или сдвиньте даты в seeds) для более реалистичного сигнала.
+> **Caveat:** аномалии Elementary обычно требуют историю запусков. На первом `dbt test` они могут пропускаться / давать warn / не иметь baseline — это нормально для sandbox. Повторите `dbt build` несколько дней (или сдвиньте даты в seeds) для более реалистичного сигнала.
 
 ## Airflow DAG (Cosmos)
 
@@ -162,12 +236,12 @@ DAG id: **`dbt_cosmos_demo`**
 ### 1. Результаты тестов Elementary (не pass)
 
 ```sql
--- Статусы failed / warn / error (названия статусов могут отличаться по версии)
+-- Статусы fail / warn / error (названия статусов могут отличаться по версии)
 SELECT
     id,
     test_unique_id,
     model_unique_id,
-    detection_time,
+    detected_at,
     status,
     test_name,
     test_short_name,
@@ -176,16 +250,49 @@ SELECT
     test_results_description
 FROM elementary.elementary_test_results
 WHERE lower(status) NOT IN ('pass', 'passed')
-ORDER BY detection_time DESC
+ORDER BY detected_at DESC
 LIMIT 100;
 ```
 
 ```sql
--- Сводка по статусам
+-- Сводка по статусам тестов
 SELECT status, count(*) AS cnt
 FROM elementary.elementary_test_results
 GROUP BY 1
 ORDER BY 2 DESC;
+```
+
+```sql
+-- Model Run Results: success / error / skipped
+SELECT status, count(*) AS cnt
+FROM elementary.model_run_results
+GROUP BY 1
+ORDER BY 2 DESC;
+```
+
+```sql
+-- Детали model runs (ошибка / skip showcase)
+SELECT name, status, message, generated_at
+FROM elementary.model_run_results
+WHERE name ILIKE '%payment%'
+   OR name ILIKE '%demo%'
+   OR lower(status) IN ('error', 'skipped')
+ORDER BY generated_at DESC
+LIMIT 50;
+```
+
+```sql
+-- Source freshness: pass / warn / error
+SELECT unique_id, status, max_loaded_at, snapshotted_at
+FROM elementary.dbt_source_freshness_results
+ORDER BY snapshotted_at DESC
+LIMIT 50;
+```
+
+```sql
+SELECT status, count(*) AS cnt
+FROM elementary.dbt_source_freshness_results
+GROUP BY 1;
 ```
 
 ### 2. Таблицы store_failures (невалидные строки)
@@ -247,6 +354,13 @@ WHERE email IS NULL OR email = '';
 SELECT *
 FROM dbt_test.stg_orders
 WHERE order_status = 'invalid_unknown_status';
+
+-- Payments DQ issues (demo_showcase)
+SELECT *
+FROM dbt_test.stg_payments
+WHERE amount IS NULL
+   OR payment_method = 'crypto_unknown'
+   OR order_id = 888888;
 ```
 
 ### 4. Marts после успешного run
@@ -293,6 +407,7 @@ LIMIT 50;
 | `init_elementary_tables` / dbt: `connection to server at "localhost" … refused` | В Docker Postgres — сервис `postgres`, не `localhost`. Используйте Cosmos `ProfileMapping` / `postgres_default`; не полагайтесь на смонтированный `profiles.yml` с `host: localhost` |
 | `getpwuid(): uid not found: 501` / no username | В `.env` задать `AIRFLOW_UID=50000` (не `$(id -u)` на macOS), затем `docker compose up -d --force-recreate` |
 | `dbt deps` fail | Нужен интернет; повторить из `dbt_demo/` |
+| `edr`: `Could not find profile named 'elementary'` | Нужен top-level профиль `elementary` в `profiles.yml` (не target у `demo_dbt`). Запускать с `--profiles-dir .` из корня репо, не `..` |
 | Anomalies «не о чём судить» | Нужна история; повторить прогоны |
 | Airflow DAG не виден | `docker compose logs airflow-dag-processor`; проверить синтаксис DAG |
 | Permission denied на volume | Оставить `AIRFLOW_UID=50000`; при необходимости `chmod -R a+rwX dags dbt_demo` (logs — named volume) |

@@ -85,3 +85,39 @@ models:
       - name: total_spent
         data_tests:
           - not_null
+
+  - name: mart_payment_summary
+    description: >
+      demo_showcase mart — skipped on dbt build when int_payments_broken errors.
+      Any data tests here are also skipped when the model does not build.
+    config:
+      tags: [demo_showcase]
+    columns:
+      - name: payment_method
+        data_tests:
+          - not_null:
+              config:
+                tags: [demo_showcase]
+
+  - name: mart_demo_unit_fail
+    description: >
+      Leaf demo_showcase model used only as the target of an intentionally
+      FAILING unit test. Expected SKIP on dbt build after unit fail.
+    config:
+      tags: [demo_showcase]
+
+# Native unit test FAIL demo (Elementary does NOT write unit tests into
+# elementary_test_results — see README caveat / elementary#1709).
+# Lives on a leaf showcase model so dim_customers / fct_orders still succeed.
+unit_tests:
+  - name: test_mart_demo_unit_fail_wrong_amount
+    description: >
+      Intentionally FAILING unit test for demo slides (wrong expect).
+      Shows unit fail in dbt logs / dbt_run_results, not Elementary Test Results UI.
+    model: mart_demo_unit_fail
+    given: []
+    expect:
+      rows:
+        # Wrong amount (expect 999 instead of 100) → unit test FAIL
+        - demo_id: 1
+          amount: 999.00

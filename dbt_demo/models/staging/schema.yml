@@ -16,7 +16,7 @@ models:
                 store_failures: true
                 severity: warn
       - name: email
-        description: Email — not_null WILL FAIL (empty email for user_id=9999)
+        description: Email — not_null WILL WARN (empty email for user_id=9999); severity warn so dim_customers still builds on dbt build
         data_tests:
           - unique:
               config:
@@ -25,7 +25,7 @@ models:
           - not_null:
               config:
                 store_failures: true
-                severity: error
+                severity: warn
       - name: country
         data_tests:
           - not_null
@@ -102,3 +102,125 @@ models:
       - name: quantity
         data_tests:
           - not_null
+
+  # --- demo_showcase: payments / shipments status matrix ---
+  - name: stg_payments
+    description: >
+      demo_showcase staging payments. Mix of pass / fail / warn data tests,
+      plus one compile ERROR test on a nonexistent column.
+    config:
+      tags: [demo_showcase]
+    columns:
+      - name: payment_id
+        data_tests:
+          - unique:
+              config:
+                tags: [demo_showcase]
+          - not_null:
+              config:
+                tags: [demo_showcase]
+      - name: order_id
+        data_tests:
+          - not_null:
+              config:
+                tags: [demo_showcase]
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+              config:
+                store_failures: true
+                severity: warn
+                tags: [demo_showcase]
+      - name: amount
+        description: Intentional null → not_null WARN on model (FAIL is on source test)
+        data_tests:
+          - not_null:
+              config:
+                store_failures: true
+                severity: warn
+                tags: [demo_showcase]
+      - name: payment_method
+        description: Intentional crypto_unknown → accepted_values WARN on model (FAIL on source)
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['card', 'paypal', 'bank_transfer']
+              config:
+                store_failures: true
+                severity: warn
+                tags: [demo_showcase]
+      - name: currency
+        data_tests:
+          - not_null:
+              config:
+                tags: [demo_showcase]
+          - accepted_values:
+              arguments:
+                values: ['EUR']
+              config:
+                tags: [demo_showcase]
+
+  - name: stg_demo_error_probe
+    description: >
+      Leaf demo_showcase model whose only job is a TEST ERROR (nonexistent column).
+      Isolated so it does not skip the payments broken → mart skipped chain.
+    config:
+      tags: [demo_showcase]
+    columns:
+      - name: probe_id
+        data_tests:
+          - not_null:
+              config:
+                tags: [demo_showcase]
+      - name: nonexistent_column_for_demo_error
+        description: >
+          Intentional TEST ERROR — column missing on model; Elementary shows
+          status=error (distinct from fail).
+        data_tests:
+          - not_null:
+              config:
+                severity: error
+                tags: [demo_showcase]
+
+  - name: stg_shipments
+    description: demo_showcase staging shipments (success model + fail/warn tests)
+    config:
+      tags: [demo_showcase]
+    columns:
+      - name: shipment_id
+        data_tests:
+          - unique:
+              config:
+                tags: [demo_showcase]
+          - not_null:
+              config:
+                tags: [demo_showcase]
+      - name: order_id
+        data_tests:
+          - not_null:
+              config:
+                tags: [demo_showcase]
+          - relationships:
+              arguments:
+                to: ref('stg_orders')
+                field: order_id
+              config:
+                store_failures: true
+                severity: warn
+                tags: [demo_showcase]
+      - name: shipment_status
+        description: Intentional lost_in_space → accepted_values FAIL (severity error; leaf model)
+        data_tests:
+          - accepted_values:
+              arguments:
+                values: ['pending', 'shipped', 'delivered', 'returned']
+              config:
+                store_failures: true
+                severity: error
+                tags: [demo_showcase]
+      - name: carrier
+        data_tests:
+          - not_null:
+              config:
+                tags: [demo_showcase]

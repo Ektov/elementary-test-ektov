@@ -27,3 +27,19 @@ demo_dbt:
       schema: elementary
       threads: 4
       keepalives_idle: 0
+
+# Required by Elementary CLI (`edr`): it looks for a profile named `elementary`
+# (not the dbt project profile `demo_dbt` / target `elementary`).
+elementary:
+  target: dev
+  outputs:
+    dev:
+      type: postgres
+      host: localhost
+      user: postgres
+      password: postgres
+      port: 5432
+      dbname: demo_db
+      schema: elementary
+      threads: 4
+      keepalives_idle: 0

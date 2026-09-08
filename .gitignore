@@ -1,5 +1,6 @@
 # Python / dbt / Docker / IDE
 .venv/
+.venv312/
 venv/
 __pycache__/
 *.py[cod]

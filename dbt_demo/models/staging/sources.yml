@@ -9,10 +9,12 @@ sources:
     schema: dbt_test
     tables:
       - name: raw_users
-        description: Raw user records (contains intentional DQ issues)
+        description: >
+          Raw user records (intentional DQ issues). Freshness WARN demo —
+          created_at tops out in 2024, so warn_after (3 days) trips while
+          error_after stays clear.
         loaded_at_field: created_at
         freshness:
-          # Native dbt source freshness: max(created_at) must be within 3 years
           warn_after: {count: 3, period: day}
           error_after: {count: 1095, period: day}
         columns:
@@ -44,3 +46,76 @@ sources:
           - name: product_id
           - name: quantity
           - name: unit_price
+
+  # demo_showcase: payments + shipments for Elementary status matrix
+  - name: payments
+    description: Payment events for demo_showcase (freshness PASS + failing source tests)
+    database: demo_db
+    schema: dbt_test
+    tags: [demo_showcase]
+    tables:
+      - name: raw_payments
+        description: >
+          Fresh payments seed. Source freshness PASS (recent _loaded_at).
+          Column tests intentionally FAIL (null amount, invalid method).
+        loaded_at_field: _loaded_at
+        freshness:
+          warn_after: {count: 2, period: day}
+          error_after: {count: 7, period: day}
+        columns:
+          - name: payment_id
+            data_tests:
+              - unique:
+                  config:
+                    tags: [demo_showcase]
+              - not_null:
+                  config:
+                    tags: [demo_showcase]
+          - name: order_id
+            data_tests:
+              - not_null:
+                  config:
+                    tags: [demo_showcase]
+          - name: amount
+            description: Intentional nulls → source not_null FAIL (severity error)
+            data_tests:
+              - not_null:
+                  config:
+                    store_failures: true
+                    severity: error
+                    tags: [demo_showcase]
+          - name: payment_method
+            description: Intentional crypto_unknown → accepted_values FAIL
+            data_tests:
+              - accepted_values:
+                  arguments:
+                    values: ['card', 'paypal', 'bank_transfer']
+                  config:
+                    store_failures: true
+                    severity: error
+                    tags: [demo_showcase]
+          - name: currency
+          - name: paid_at
+          - name: _loaded_at
+
+  - name: ops
+    description: Operational feeds for demo_showcase (freshness ERROR)
+    database: demo_db
+    schema: dbt_test
+    tags: [demo_showcase]
+    tables:
+      - name: raw_shipments
+        description: >
+          Stale shipments seed (~45d old _loaded_at). Source freshness ERROR
+          with tight error_after (14 days). Also has DQ issues for model tests.
+        loaded_at_field: _loaded_at
+        freshness:
+          warn_after: {count: 1, period: day}
+          error_after: {count: 14, period: day}
+        columns:
+          - name: shipment_id
+          - name: order_id
+          - name: carrier
+          - name: shipment_status
+          - name: shipped_at
+          - name: _loaded_at
