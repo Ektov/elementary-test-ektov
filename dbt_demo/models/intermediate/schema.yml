@@ -1,0 +1,16 @@
+version: 2
+
+models:
+  - name: int_payments_broken
+    description: >
+      demo_showcase intermediate model that always ERRORS at runtime
+      (selects nonexistent_column_for_demo_error). Downstream mart is skipped.
+    config:
+      tags: [demo_showcase]
+    columns:
+      - name: payment_id
+        data_tests:
+          # Skipped when model fails to build; still useful for matrix docs
+          - not_null:
+              config:
+                tags: [demo_showcase]
