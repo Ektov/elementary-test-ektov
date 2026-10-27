@@ -28,7 +28,7 @@ from cosmos import (
     TestBehavior,
     DbtTestLocalOperator
 )
-from cosmos.constants import ExecutionMode, LoadMode
+from cosmos.constants import ExecutionMode, LoadMode, SourceRenderingBehavior
 from cosmos.profiles import PostgresUserPasswordProfileMapping
 
 AIRFLOW_HOME = Path(os.environ.get("AIRFLOW_HOME", "/opt/airflow"))
@@ -69,6 +69,7 @@ render_config = RenderConfig(
     test_behavior=TestBehavior.BUILD,
     emit_datasets=False,
     exclude=["package:elementary"],
+    source_rendering_behavior=SourceRenderingBehavior.WITH_TESTS_OR_FRESHNESS,
 )
 
 with DAG(

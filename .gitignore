@@ -40,3 +40,7 @@ Thumbs.db
 
 # Docker
 postgres_data/
+
+# Elementary generated reports
+edr_lab/edr_out/*
+!edr_lab/edr_out/.gitkeep

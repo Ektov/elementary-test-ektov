@@ -3,6 +3,8 @@ version: 2
 models:
   - name: stg_users
     description: Cleaned users from raw_users (intentional DQ failures expected)
+    meta:
+      owner: ["s.ektov.autodc.eu"]
     columns:
       - name: user_id
         description: User identifier — unique test WILL FAIL (duplicate user_id=1 in seeds)
@@ -11,10 +13,20 @@ models:
               config:
                 store_failures: true
                 severity: warn
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: uniqueness
+                  description: User ID must be unique across all users
           - not_null:
               config:
                 store_failures: true
                 severity: warn
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: completeness
+                  description: User ID must not be null
       - name: email
         description: Email — not_null WILL WARN (empty email for user_id=9999); severity warn so dim_customers still builds on dbt build
         data_tests:
@@ -22,43 +34,113 @@ models:
               config:
                 store_failures: true
                 severity: warn
+                tags: ["extended_validations"]
+                meta:
+                  is_incremental: true
+                  impact: high
+                  dimension: uniqueness
+                  description: Email address must be unique across all users
           - not_null:
               config:
                 store_failures: true
                 severity: warn
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: completeness
+                  description: Email address must not be null
       - name: country
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: medium
+                  dimension: completeness
+                  description: Country code must be present for every user
       - name: status
         data_tests:
           - accepted_values:
               arguments:
-                values: ['active', 'inactive', 'pending', 'blocked']
+                values: ['active', 'inactive']
+              config:
+                meta:
+                  disable_test_samples: true
+                  is_incremental: false
+                  impact: medium
+                  dimension: invalidity
+                  description: User status must be one of the allowed values
 
   - name: stg_products
     description: Cleaned product catalog
+    meta:
+      owner: ["s.ektov.autodc.eu"]
     columns:
       - name: product_id
         data_tests:
-          - unique
-          - not_null
+          - unique:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: uniqueness
+                  description: Product ID must be unique in the catalog
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: completeness
+                  description: Product ID must not be null
       - name: category
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: medium
+                  dimension: completeness
+                  description: Product category must be filled
       - name: price
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: completeness
+                  description: Product price must be present
 
   - name: stg_orders
     description: Cleaned orders — accepted_values WILL FAIL on invalid_unknown_status
+    meta:
+      owner: ["s.ektov.autodc.eu"]
     columns:
       - name: order_id
         data_tests:
-          - unique
-          - not_null
+          - unique:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: uniqueness
+                  description: Order ID must be unique
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: completeness
+                  description: Order ID must not be null
       - name: user_id
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: completeness
+                  description: Order must reference a user ID
           - relationships:
               arguments:
                 to: ref('stg_users')
@@ -66,6 +148,12 @@ models:
               config:
                 store_failures: true
                 severity: warn
+                tags: ["extended_validations"]
+                meta:
+                  is_incremental: true
+                  impact: high
+                  dimension: integrity
+                  description: Order user ID must exist in stg_users
       - name: order_status
         data_tests:
           - accepted_values:
@@ -74,34 +162,92 @@ models:
               config:
                 store_failures: true
                 severity: warn
+                tags: ["extended_validations"]
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: invalidity
+                  description: Order status must be one of the allowed values
       - name: order_date
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: completeness
+                  description: Order date must be present
 
   - name: stg_order_items
     description: Cleaned order line items
+    meta:
+      owner: ["s.ektov.autodc.eu"]
     columns:
       - name: item_id
         data_tests:
-          - unique
-          - not_null
+          - unique:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: uniqueness
+                  description: Order item ID must be unique
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: completeness
+                  description: Order item ID must not be null
       - name: order_id
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: completeness
+                  description: Line item must reference an order ID
           - relationships:
               arguments:
                 to: ref('stg_orders')
                 field: order_id
+              config:
+                tags: ["extended_validations"]
+                meta:
+                  is_incremental: true
+                  impact: high
+                  dimension: integrity
+                  description: Line item order ID must exist in stg_orders
       - name: product_id
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: completeness
+                  description: Line item must reference a product ID
           - relationships:
               arguments:
                 to: ref('stg_products')
                 field: product_id
+              config:
+                tags: ["extended_validations"]
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: integrity
+                  description: Line item product ID must exist in stg_products
       - name: quantity
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: medium
+                  dimension: completeness
+                  description: Line item quantity must be present
 
   # --- demo_showcase: payments / shipments status matrix ---
   - name: stg_payments
@@ -110,20 +256,37 @@ models:
       plus one compile ERROR test on a nonexistent column.
     config:
       tags: [demo_showcase]
+    meta:
+      owner: ["s.ektov.autodc.eu"]
     columns:
       - name: payment_id
         data_tests:
           - unique:
               config:
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: uniqueness
+                  description: Payment ID must be unique
           - not_null:
               config:
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: completeness
+                  description: Payment ID must not be null
       - name: order_id
         data_tests:
           - not_null:
               config:
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: completeness
+                  description: Payment must reference an order ID
           - relationships:
               arguments:
                 to: ref('stg_orders')
@@ -131,7 +294,12 @@ models:
               config:
                 store_failures: true
                 severity: warn
-                tags: [demo_showcase]
+                tags: [demo_showcase, extended_validations]
+                meta:
+                  is_incremental: true
+                  impact: high
+                  dimension: integrity
+                  description: Payment order ID must exist in stg_orders
       - name: amount
         description: Intentional null → not_null WARN on model (FAIL is on source test)
         data_tests:
@@ -140,6 +308,11 @@ models:
                 store_failures: true
                 severity: warn
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: completeness
+                  description: Payment amount must not be null
       - name: payment_method
         description: Intentional crypto_unknown → accepted_values WARN on model (FAIL on source)
         data_tests:
@@ -149,17 +322,32 @@ models:
               config:
                 store_failures: true
                 severity: warn
-                tags: [demo_showcase]
+                tags: [demo_showcase, extended_validations]
+                meta:
+                  is_incremental: false
+                  impact: medium
+                  dimension: invalidity
+                  description: Payment method must be card, paypal, or bank_transfer
       - name: currency
         data_tests:
           - not_null:
               config:
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: medium
+                  dimension: completeness
+                  description: Payment currency must be present
           - accepted_values:
               arguments:
                 values: ['EUR']
               config:
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: medium
+                  dimension: invalidity
+                  description: Payment currency must be EUR
 
   - name: stg_demo_error_probe
     description: >
@@ -167,12 +355,19 @@ models:
       Isolated so it does not skip the payments broken → mart skipped chain.
     config:
       tags: [demo_showcase]
+    meta:
+      owner: ["s.ektov.autodc.eu"]
     columns:
       - name: probe_id
         data_tests:
           - not_null:
               config:
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: low
+                  dimension: completeness
+                  description: Probe ID must not be null
       - name: nonexistent_column_for_demo_error
         description: >
           Intentional TEST ERROR — column missing on model; Elementary shows
@@ -182,25 +377,91 @@ models:
               config:
                 severity: error
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: low
+                  dimension: completeness
+                  description: Demo column for intentional test error must not be null
+
+  - name: stg_demo_contract_pass
+    description: >
+      demo_showcase leaf with an enforced dbt model contract that PASSES
+      (SQL columns/types match the YAML contract).
+    config:
+      tags: [demo_showcase]
+      contract:
+        enforced: true
+    meta:
+      owner: ["s.ektov.autodc.eu"]
+    columns:
+      - name: contract_id
+        data_type: integer
+        constraints:
+          - type: not_null
+      - name: status
+        data_type: character varying
+        constraints:
+          - type: not_null
+      - name: amount
+        data_type: numeric(12, 2)
+
+  - name: stg_demo_contract_fail
+    description: >
+      demo_showcase leaf with an enforced dbt model contract that FAILS.
+      YAML says amount is integer; SQL returns numeric → contract breach → model run error
+      (not a data test fail). Isolated leaf so it does not skip the main path.
+    config:
+      tags: [demo_showcase]
+      contract:
+        enforced: true
+    meta:
+      owner: ["s.ektov.autodc.eu"]
+    columns:
+      - name: contract_id
+        data_type: integer
+        constraints:
+          - type: not_null
+      - name: status
+        data_type: character varying
+      - name: amount
+        # Intentional mismatch vs SQL numeric(12,2) → contract FAIL
+        data_type: integer
 
   - name: stg_shipments
     description: demo_showcase staging shipments (success model + fail/warn tests)
     config:
       tags: [demo_showcase]
+    meta:
+      owner: ["s.ektov.autodc.eu"]
     columns:
       - name: shipment_id
         data_tests:
           - unique:
               config:
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: uniqueness
+                  description: Shipment ID must be unique
           - not_null:
               config:
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: completeness
+                  description: Shipment ID must not be null
       - name: order_id
         data_tests:
           - not_null:
               config:
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: completeness
+                  description: Shipment must reference an order ID
           - relationships:
               arguments:
                 to: ref('stg_orders')
@@ -208,7 +469,12 @@ models:
               config:
                 store_failures: true
                 severity: warn
-                tags: [demo_showcase]
+                tags: [demo_showcase, extended_validations]
+                meta:
+                  is_incremental: true
+                  impact: high
+                  dimension: integrity
+                  description: Shipment order ID must exist in stg_orders
       - name: shipment_status
         description: Intentional lost_in_space → accepted_values FAIL (severity error; leaf model)
         data_tests:
@@ -218,9 +484,19 @@ models:
               config:
                 store_failures: true
                 severity: error
-                tags: [demo_showcase]
+                tags: [demo_showcase, extended_validations]
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: invalidity
+                  description: Shipment status must be one of the allowed values
       - name: carrier
         data_tests:
           - not_null:
               config:
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: medium
+                  dimension: completeness
+                  description: Carrier name must be present for every shipment

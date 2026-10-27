@@ -5,28 +5,82 @@ models:
     description: >
       Order-line fact with calculated_total (order-level sum), is_high_value flag,
       and product category for Elementary dimension anomalies.
+    meta:
+      owner: ["s.ektov.autodc.eu"]
     columns:
       - name: order_id
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: completeness
+                  description: Fact order ID must not be null
       - name: item_id
         data_tests:
-          - unique
-          - not_null
+          - unique:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: uniqueness
+                  description: Fact item ID must be unique
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: completeness
+                  description: Fact item ID must not be null
       - name: calculated_total
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: accuracy
+                  description: Calculated order total must be present
       - name: category
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: medium
+                  dimension: completeness
+                  description: Product category on fact row must be present
+          - dbt_expectations.expect_column_values_to_be_in_set:
+              arguments:
+                value_set: [ 'books', 'home', 'clothing', 'electronics', 'toys', 'sports']
+              config:
+                meta:
+                  is_incremental: false
+                  impact: medium
+                  dimension: completeness
+                  description: Product category on fact row must in 'books', 'home', 'clothing', 'electronics', 'toys', 'sports', 'beauty'
       - name: order_date
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: completeness
+                  description: Order date on fact row must be present
       - name: updated_at
         data_tests:
           - freshness_custom:
               arguments:
                 max_hours: 1440
+              config:
+                tags: ["extended_validations"]
+                meta:
+                  is_incremental: true
+                  impact: medium
+                  dimension: freshness
+                  description: Fact orders updated_at must be fresher than 1440 hours
 
     data_tests:
       # Elementary volume anomalies on daily order volume
@@ -40,6 +94,12 @@ models:
           config:
             severity: warn
             store_failures: true
+            tags: ["extended_validations"]
+            meta:
+              is_incremental: true
+              impact: medium
+              dimension: consistency
+              description: Daily order volume must not deviate anomalously
       # Elementary dimension anomalies by product category
       - elementary.dimension_anomalies:
           arguments:
@@ -53,16 +113,28 @@ models:
           config:
             severity: warn
             store_failures: true
+            tags: ["extended_validations"]
+            meta:
+              is_incremental: true
+              impact: medium
+              dimension: consistency
+              description: Daily order volume by category must not deviate anomalously
       - elementary.freshness_anomalies:
           arguments:
             timestamp_column: updated_at
           config:
             store_failures: true
+            tags: ["extended_validations"]
+            meta:
+              is_incremental: true
+              impact: high
+              dimension: freshness
+              description: Fact orders updated_at freshness must not be anomalous
 
   - name: dim_customers
     description: Customer dimension with order aggregates
     meta:
-      owner: ["data_team","analytics"]
+      owner: ["s.ektov.autodc.eu"]
     columns:
       - name: user_id
         data_tests:
@@ -72,19 +144,40 @@ models:
                 severity: error
                 error_if: ">1000"
                 warn_if: ">10"
-                tags: ["critical", "finance"]
+                tags: ["critical", "finance", "extended_validations"]
                 meta:
                   owner: "@finance_squad"
                   incident_priority: "P2"
-                  description: user_id value must be unique
+                  description: Customer user ID must be unique
                   Grudge: "I'm a grudge"
-          - not_null
+                  is_incremental: false
+                  impact: critical
+                  dimension: uniqueness
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: critical
+                  dimension: completeness
+                  description: Customer user ID must not be null
       - name: total_orders
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: medium
+                  dimension: accuracy
+                  description: Total orders aggregate must be present
       - name: total_spent
         data_tests:
-          - not_null
+          - not_null:
+              config:
+                meta:
+                  is_incremental: false
+                  impact: high
+                  dimension: accuracy
+                  description: Total spent aggregate must be present
 
   - name: mart_payment_summary
     description: >
@@ -92,12 +185,19 @@ models:
       Any data tests here are also skipped when the model does not build.
     config:
       tags: [demo_showcase]
+    meta:
+      owner: ["s.ektov.autodc.eu"]
     columns:
       - name: payment_method
         data_tests:
           - not_null:
               config:
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: medium
+                  dimension: completeness
+                  description: Payment method in summary must not be null
 
   - name: mart_demo_unit_fail
     description: >
@@ -105,6 +205,8 @@ models:
       FAILING unit test. Expected SKIP on dbt build after unit fail.
     config:
       tags: [demo_showcase]
+    meta:
+      owner: ["s.ektov.autodc.eu"]
 
 # Native unit test FAIL demo (Elementary does NOT write unit tests into
 # elementary_test_results — see README caveat / elementary#1709).

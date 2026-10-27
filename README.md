@@ -147,8 +147,8 @@ A separate subgraph tagged `demo_showcase` **does not break** the main path `ord
 
 | Status | How it is produced |
 |--------|--------------------|
-| `success` | `stg_*`, `fct_orders`, `dim_customers`, `stg_payments`, `stg_shipments` |
-| `error` | `int_payments_broken` — SQL references a nonexistent column |
+| `success` | `stg_*`, `fct_orders`, `dim_customers`, `stg_payments`, `stg_shipments`, `stg_demo_contract_pass` (enforced contract OK) |
+| `error` | `int_payments_broken` — SQL references a nonexistent column; `stg_demo_contract_fail` — enforced contract type mismatch (`amount` integer vs numeric) |
 | `skipped` | `mart_payment_summary` (upstream model error) + `mart_demo_unit_fail` (upstream unit FAIL) |
 
 ### Test Results (`elementary.elementary_test_results`)
@@ -195,6 +195,8 @@ Elementary **does not write unit tests into `elementary_test_results`** ([elemen
 | `raw_shipments.csv` | stale `_loaded_at` (~45d) | source freshness **error** |
 | — | `stg_demo_error_probe` nonexistent column test | test status **error** (DB) |
 | — | `int_payments_broken` SQL | model run **error** → `mart_payment_summary` **skipped** |
+| — | `stg_demo_contract_pass` enforced contract | model run **success** (types match) |
+| — | `stg_demo_contract_fail` enforced contract | model run **error** (YAML `amount: integer`, SQL `numeric`) |
 
 Regenerate CSVs (including fresh payment timestamps):
 
@@ -206,7 +208,8 @@ python3 scripts/generate_seeds.py
 
 1. **Generic / source** — `models/staging/schema.yml` + `sources.yml` (`unique`, `not_null`, `accepted_values`, `relationships`). Mix of `severity: warn` / `error` + `store_failures: true`.
 2. **Native unit tests (dbt 1.8+)** — PASS on `fct_orders`, intentional FAIL on `mart_demo_unit_fail` (see caveat above).
-3. **Elementary anomalies** — `models/marts/schema.yml`:
+3. **Model contracts (dbt 1.5+)** — enforced on `stg_demo_contract_pass` (PASS) and `stg_demo_contract_fail` (intentional type mismatch → model **error**, not a data test).
+4. **Elementary anomalies** — `models/marts/schema.yml`:
    - `elementary.volume_anomalies` on `fct_orders` (`order_date`, day bucket)
    - `elementary.dimension_anomalies` by `category` on `fct_orders`
    - `elementary.freshness_anomalies` on `updated_at`

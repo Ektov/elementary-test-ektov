@@ -1,0 +1,27 @@
+# Isolated Elementary CLI profile for the edr_lab experiment.
+# Inside Docker (same compose network): host=postgres
+# From the Mac host: host=localhost
+
+elementary:
+  target: lab
+  outputs:
+    lab:
+      type: postgres
+      host: postgres
+      user: postgres
+      password: postgres
+      port: 5432
+      dbname: edr_lab
+      schema: elementary
+      threads: 4
+      keepalives_idle: 0
+    lab_host:
+      type: postgres
+      host: localhost
+      user: postgres
+      password: postgres
+      port: 5432
+      dbname: edr_lab
+      schema: elementary
+      threads: 4
+      keepalives_idle: 0

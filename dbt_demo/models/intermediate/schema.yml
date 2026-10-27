@@ -7,6 +7,8 @@ models:
       (selects nonexistent_column_for_demo_error). Downstream mart is skipped.
     config:
       tags: [demo_showcase]
+    meta:
+      owner: ["s.ektov.autodc.eu"]
     columns:
       - name: payment_id
         data_tests:
@@ -14,3 +16,8 @@ models:
           - not_null:
               config:
                 tags: [demo_showcase]
+                meta:
+                  is_incremental: false
+                  impact: low
+                  dimension: completeness
+                  description: Payment ID on broken intermediate must not be null

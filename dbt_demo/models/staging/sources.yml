@@ -47,6 +47,7 @@ sources:
           - name: quantity
           - name: unit_price
 
+
   # demo_showcase: payments + shipments for Elementary status matrix
   - name: payments
     description: Payment events for demo_showcase (freshness PASS + failing source tests)
@@ -68,14 +69,29 @@ sources:
               - unique:
                   config:
                     tags: [demo_showcase]
+                    meta:
+                      is_incremental: false
+                      impact: critical
+                      dimension: uniqueness
+                      description: Source payment ID must be unique
               - not_null:
                   config:
                     tags: [demo_showcase]
+                    meta:
+                      is_incremental: false
+                      impact: critical
+                      dimension: completeness
+                      description: Source payment ID must not be null
           - name: order_id
             data_tests:
               - not_null:
                   config:
                     tags: [demo_showcase]
+                    meta:
+                      is_incremental: false
+                      impact: high
+                      dimension: completeness
+                      description: Source payment must reference an order ID
           - name: amount
             description: Intentional nulls → source not_null FAIL (severity error)
             data_tests:
@@ -84,6 +100,11 @@ sources:
                     store_failures: true
                     severity: error
                     tags: [demo_showcase]
+                    meta:
+                      is_incremental: false
+                      impact: critical
+                      dimension: completeness
+                      description: Source payment amount must not be null
           - name: payment_method
             description: Intentional crypto_unknown → accepted_values FAIL
             data_tests:
@@ -93,7 +114,12 @@ sources:
                   config:
                     store_failures: true
                     severity: error
-                    tags: [demo_showcase]
+                    tags: [demo_showcase, extended_validations]
+                    meta:
+                      is_incremental: false
+                      impact: high
+                      dimension: invalidity
+                      description: Source payment method must be card, paypal, or bank_transfer
           - name: currency
           - name: paid_at
           - name: _loaded_at
